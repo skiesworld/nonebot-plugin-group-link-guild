@@ -67,8 +67,11 @@ async def get_role_name(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEv
     return role_name
 
 
-async def get_message(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent]) -> list:
+async def get_message(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent]):
     """获取message列表"""
+    sender_name = await get_member_nickname(bot, event, event.user_id)
+    if get_group_role():
+        sender_name = await get_role_name(bot=bot, event=event) + sender_name
     message = []
     for msg in event.message:
         # 文本
@@ -102,12 +105,28 @@ async def get_message(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEven
         elif msg.type == "forward":
             msgData = MessageSegment.text('[合并转发]')
         else:
-            msgData = MessageSegment.text(f"[{msg.type}]")
+            msgData = MessageSegment.text(msg.type)
         message.append(msgData)
-    return message
+    return sender_name, message
 
 
 async def send_msgs(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent], result):
+    """发送消息"""
+    if isinstance(event, GroupMessageEvent):
+        for group in group_list:
+            if event.group_id == int(group["group"]) and not group["group_cmd"]:
+                await bot.send_guild_channel_msg(
+                    guild_id=group["guild"][:group["guild"].find(":")],
+                    channel_id=group["guild"][group["guild"].find(":") + 1:],
+                    message=result
+                )
+    else:
+        for group in group_list:
+            if f"{event.guild_id}:{event.channel_id}" == group["guild"] and not group["guild_cmd"]:
+                await bot.send_group_msg(group_id=int(group["group"]), message=result)
+
+
+async def send_msgs_cmd(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent], result):
     """发送消息"""
     if isinstance(event, GroupMessageEvent):
         for group in group_list:
