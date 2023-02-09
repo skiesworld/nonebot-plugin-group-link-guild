@@ -67,7 +67,7 @@ async def get_role_name(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEv
     return role_name
 
 
-async def get_message(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent]):
+async def get_message(use_cmd: bool, bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent]):
     """获取message列表"""
     sender_name = await get_member_nickname(bot, event, event.user_id)
     if get_group_role():
@@ -80,7 +80,7 @@ async def get_message(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEven
             msgData = MessageSegment.video(msg.data['url'])
             message.append(msgData)
             sender_name = await get_member_nickname(bot, event, event.user_id)
-            await bot.send_msgs(bot, event, f"{sender_name} 发送了视频消息：")
+            await choose_send_way(use_cmd, bot, event, f"{sender_name} 发送了视频消息：")
             return message
         elif msg.type == "text":
             msgData = MessageSegment.text(msg.data['text'])
@@ -104,13 +104,29 @@ async def get_message(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEven
         # forward
         elif msg.type == "forward":
             msgData = MessageSegment.text('[合并转发]')
+        # redbag
+        elif msg.type == "redbag":
+            msgData = MessageSegment.text('[QQ红包]')
+        # json
+        elif msg.type == "json":
+            data = str(msg.data["data"]) if isinstance(event, GroupMessageEvent) else str(msg.data["data"]).replace(
+                "\\\\", "\\")
+            msgData = MessageSegment.json(data)
+            message.append(msgData)
+            sender_name = await get_member_nickname(bot, event, event.user_id)
+            await choose_send_way(use_cmd, bot, event, f"{sender_name} 发送了卡片消息：")
+            return message
         else:
             msgData = MessageSegment.text(msg.type)
         message.append(msgData)
     return sender_name, message
 
 
-async def send_msgs(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent], result):
+async def choose_send_way(send_way: bool, bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent], result):
+    await send_msgs_cmd(bot, event, result) if send_way else await send_msgs_no_cmd(bot, event, result)
+
+
+async def send_msgs_no_cmd(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent], result):
     """发送消息"""
     if isinstance(event, GroupMessageEvent):
         for group in group_list:
