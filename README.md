@@ -29,31 +29,27 @@
 ## 配置
 
 ```json
-# 互通的群与频道列表，因 NoneBot读取配置文件问题，请填写完毕之后缩减至一行
-GROUP_GUILD_LIST=[
-  {
-    "group_cmd": false,
-    "guild_cmd": false,
-    "group": "群号1",
-    "guild": "频道A ID:子频道A ID"
-  },
-  {
-    "group_cmd": false,
-    "guild_cmd": false,
-    "group": "群号2",
-    "guild": "频道B ID:子频道B ID"
-  }
-]
+# 互通的群与频道列表
+group_link_guild = '[
+    {
+        "group_id": 123456789,
+        "group_cmd": ".",
+        "guild_id": 123456789098765,
+        "channel_id": 2356423,
+        "guild_cmd": "#",
+        "self_id": 123456789
+    }
+]'
 
-# 是否发送头衔，仅支持：[群主]、[管理员]、[频道主]
-GROUP_GUILD_ROLE=true
+# 是否发送头衔，仅支持：[群主]、[管理员]、[频道主]、[超级管理员]
+display_role = true
 ```
 
 ## 使用
 
-当配置中 `xxx_cmd` 为 `true`
+当配置中 `xxx_cmd` 为 `任意命令前缀`
 
-在本群聊中需要使用命令前缀 `link` 或 `.` + 消息 才能发送消息
+在本群聊中需要使用 `设置的命令前缀` + 消息 才能发送消息
 
 ## 特别感谢
 
