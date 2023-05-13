@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setuptools.setup(
     name="nonebot-plugin-group-link-guild",  # 项目名称，保证它的唯一性，不要跟已存在的包名冲突即可
-    version="0.0.3",  # 程序版本
+    version="0.0.4",  # 程序版本
     author="17TheWord",  # 项目作者
     author_email="17theword@gmail.com",  # 作者邮件
     description="互通QQ群聊与QQ频道消息的插件",  # 项目的一句话描述
@@ -19,7 +19,7 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     install_requires=[
-        'nonebot2>=2.0.0rc3',
+        'nonebot2>=2.0.0rc4',
         'nonebot-adapter-onebot>=2.1.1',
         'nonebot-plugin-guild-patch>=0.2.0',
     ],
