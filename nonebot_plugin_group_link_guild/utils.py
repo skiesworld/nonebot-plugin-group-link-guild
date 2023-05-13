@@ -1,56 +1,50 @@
+import json
 from typing import Union
 
-from nonebot import get_driver
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageSegment
+from nonebot import get_bot
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageSegment, Message
 from nonebot_plugin_guild_patch import GuildMessageEvent
 
-group_role = {
-    "owner": "[群主]",
-    "admin": "[管理员]",
-    "member": ""
-}
-"""群角色字典"""
+from .config import plugin_config
 
 
-def get_group_list() -> list:
-    """获取 互通群聊列表"""
-    try:
-        return list(get_driver().config.group_guild_list)
-    except AttributeError:
-        return []
-
-
-def get_group_role() -> bool:
-    """获取 是否发送群聊头衔"""
-    try:
-        return bool(get_driver().config.group_guild_role)
-    except AttributeError:
-        return False
-
-
-group_list = get_group_list()
-"""互通群列表"""
-
-
-async def msg_rule(event: Union[GroupMessageEvent, GuildMessageEvent]) -> bool:
+async def msg_rule(event: Union[GroupMessageEvent, GuildMessageEvent], enable_cmd: bool) -> bool:
     """聊天规则"""
-    if isinstance(event, GroupMessageEvent):
-        for group in group_list:
-            if event.group_id == int(group["group"]):
-                return True
-    elif isinstance(event, GuildMessageEvent):
-        # 返回频道成员昵称
-        for group in group_list:
-            if f"{event.guild_id}:{event.channel_id}" == group["guild"]:
-                return True
+    for link in plugin_config.group_link_guild:
+        if event.self_id == link.self_id:  # 确保交给需要的bot处理
+            if isinstance(event, GroupMessageEvent):
+                if event.group_id == link.group_id:
+                    if enable_cmd and link.group_cmd:
+                        return True
+                    elif not enable_cmd and not link.group_cmd:
+                        return True
+            elif isinstance(event, GuildMessageEvent):
+                if event.guild_id == link.guild_id:
+                    if enable_cmd and link.guild_cmd:
+                        return True
+                    elif not enable_cmd and not link.guild_cmd:
+                        return True
     return False
+
+
+async def msg_rule_no_cmd(event: Union[GroupMessageEvent, GuildMessageEvent]) -> bool:
+    """无命令头 聊天规则"""
+    return await msg_rule(event, False)
+
+
+async def msg_rule_cmd(event: Union[GroupMessageEvent, GuildMessageEvent]) -> bool:
+    """命令头 聊天规则"""
+    return await msg_rule(event, True)
 
 
 async def get_role_name(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent]) -> str:
     """获取角色名"""
     role_name = ""
     if isinstance(event, GroupMessageEvent):
-        role_name = group_role[event.sender.role]
+        if event.sender.role == "owner":
+            role_name = "[群主]"
+        elif event.sender.role == "admin":
+            role_name = "[管理员]"
     elif isinstance(event, GuildMessageEvent):
         roles = set(
             role["role_id"]
@@ -63,24 +57,28 @@ async def get_role_name(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEv
         if "4" in roles:
             role_name = "[频道主]"
         elif "2" in roles:
-            role_name = "[管理员]"
+            role_name = "[超级管理员]"
     return role_name
 
 
-async def get_message(use_cmd: bool, bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent]):
+async def get_message(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent]):
     """获取message列表"""
     sender_name = await get_member_nickname(bot, event, event.user_id)
-    if get_group_role():
-        sender_name = await get_role_name(bot=bot, event=event) + sender_name
-    message = []
+    if plugin_config.display_role:
+        role_name = await get_role_name(bot=bot, event=event)
+    else:
+        role_name = ""
+
+    message = [MessageSegment.text(f"{role_name}{sender_name} 说：\n")]
+
     for msg in event.message:
         # 文本
         # 视频
         if msg.type == "video":
             msgData = MessageSegment.video(msg.data['url'])
             message.append(msgData)
-            sender_name = await get_member_nickname(bot, event, event.user_id)
-            await choose_send_way(use_cmd, bot, event, f"{sender_name} 发送了视频消息：")
+
+            await send_msgs(event=event, result=f"{sender_name} 发送了视频消息：")
             return message
         elif msg.type == "text":
             msgData = MessageSegment.text(msg.data['text'])
@@ -109,53 +107,37 @@ async def get_message(use_cmd: bool, bot: Bot, event: Union[GroupMessageEvent, G
             msgData = MessageSegment.text('[QQ红包]')
         # json
         elif msg.type == "json":
+            json_data = msg.data["data"]
+            print(json_data)
+            print("==============")
+            print(json.loads(json_data))
+
             data = str(msg.data["data"]) if isinstance(event, GroupMessageEvent) else str(msg.data["data"]).replace(
                 "\\\\", "\\")
-            msgData = MessageSegment.json(data)
+            msgData = MessageSegment.json(json.loads(json_data))
             message.append(msgData)
-            sender_name = await get_member_nickname(bot, event, event.user_id)
-            await choose_send_way(use_cmd, bot, event, f"{sender_name} 发送了卡片消息：")
+
+            await send_msgs(event=event, result=f"{sender_name} 发送了卡片消息：")
             return message
         else:
             msgData = MessageSegment.text(msg.type)
         message.append(msgData)
-    return sender_name, message
+    return message
 
 
-async def choose_send_way(send_way: bool, bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent], result):
-    await send_msgs_cmd(bot, event, result) if send_way else await send_msgs_no_cmd(bot, event, result)
-
-
-async def send_msgs_no_cmd(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent], result):
+async def send_msgs(event: Union[GroupMessageEvent, GuildMessageEvent], result: Union[str, Message, MessageSegment]):
     """发送消息"""
-    if isinstance(event, GroupMessageEvent):
-        for group in group_list:
-            if event.group_id == int(group["group"]) and not group["group_cmd"]:
-                await bot.send_guild_channel_msg(
-                    guild_id=group["guild"][:group["guild"].find(":")],
-                    channel_id=group["guild"][group["guild"].find(":") + 1:],
-                    message=result
-                )
-    else:
-        for group in group_list:
-            if f"{event.guild_id}:{event.channel_id}" == group["guild"] and not group["guild_cmd"]:
-                await bot.send_group_msg(group_id=int(group["group"]), message=result)
-
-
-async def send_msgs_cmd(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent], result):
-    """发送消息"""
-    if isinstance(event, GroupMessageEvent):
-        for group in group_list:
-            if event.group_id == int(group["group"]):
-                await bot.send_guild_channel_msg(
-                    guild_id=group["guild"][:group["guild"].find(":")],
-                    channel_id=group["guild"][group["guild"].find(":") + 1:],
-                    message=result
-                )
-    else:
-        for group in group_list:
-            if f"{event.guild_id}:{event.channel_id}" == group["guild"]:
-                await bot.send_group_msg(group_id=int(group["group"]), message=result)
+    for link in plugin_config.group_link_guild:
+        if bot := get_bot(str(link.self_id)):
+            if isinstance(event, GroupMessageEvent):
+                if event.group_id == link.group_id:
+                    await bot.send_guild_channel_msg(
+                        guild_id=link.guild_id,
+                        channel_id=link.channel_id,
+                        message=result
+                    )
+            elif isinstance(event, GuildMessageEvent):
+                await bot.send_group_msg(group_id=link.group_id, message=result)
 
 
 async def get_member_nickname(bot: Bot, event: Union[GroupMessageEvent, GuildMessageEvent], user_id) -> str:
@@ -165,11 +147,7 @@ async def get_member_nickname(bot: Bot, event: Union[GroupMessageEvent, GuildMes
         # 如果获取发送者的昵称
         if event.user_id == int(user_id):
             # 如果群名片为空，则发送昵称
-            if event.sender.card == "":
-                return event.sender.nickname
-            # 如果群名片不为空，发送群名片
-            else:
-                return event.sender.card
+            return event.sender.card or event.sender.nickname
         # 如果获取其他人的昵称
         else:
             return (await bot.get_group_member_info(
