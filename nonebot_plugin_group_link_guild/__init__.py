@@ -1,9 +1,10 @@
 from typing import Union
 
-from nonebot import on_message, on_command
+from nonebot import on_message, on_command, require
 from nonebot.plugin import PluginMetadata
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Bot, Message
 from nonebot.params import CommandArg
+require("nonebot_plugin_guild_patch")
 from nonebot_plugin_guild_patch import GuildMessageEvent
 
 from .config import Config
